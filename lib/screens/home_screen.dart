@@ -1,7 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:social_media_app/controllers/auth_controller.dart';
+import 'package:social_media_app/controllers/posts_controller.dart';
+import 'package:social_media_app/screens/create_post_screen.dart';
+import 'package:social_media_app/screens/create_post_screen.dart';
 import 'package:social_media_app/screens/login_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -54,16 +58,60 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
       body: FirebaseAuth.instance.currentUser!.emailVerified
-          ? SafeArea(
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _samplePosts.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final post = _samplePosts[index];
-                  return _PostCard(post: post, theme: theme);
-                },
-              ),
+          ? StreamBuilder(
+              stream: PostsController().getPostsStream(),
+              builder: (context, asyncSnapshot) {
+                if (asyncSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (asyncSnapshot.hasError) {
+                  return Center(child: Text('Error: ${asyncSnapshot.error}'));
+                } else if (asyncSnapshot.hasData &&
+                    asyncSnapshot.data!.docs.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No posts available. Tap the + button to create a new post!',
+                      style: theme.textTheme.bodyMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                } else if (asyncSnapshot.hasData &&
+                    asyncSnapshot.data!.docs.isNotEmpty) {
+                  List<QueryDocumentSnapshot> postsDocs =
+                      asyncSnapshot.data!.docs;
+                  List<_Post> posts = postsDocs.map((doc) {
+                    var data = doc.data() as Map<String, dynamic>;
+                    return _Post(
+                      username: data['publisherUserName'] ?? 'Unknown',
+                      caption: data['postContent'] ?? '',
+                      publisherUserId: data['publisherUserId'] ?? '',
+                      postId: doc.id,
+
+                      timestamp: data['createdAt'] != null
+                          ? (data['createdAt'] as Timestamp)
+                                .toDate()
+                                .toLocal()
+                                .toString()
+                          : 'Unknown time',
+                      likes: data['likes'] ?? 0,
+                      comments: data['comments'] ?? 0,
+                    );
+                  }).toList();
+
+                  return SafeArea(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: posts.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final post = posts[index];
+                        return _PostCard(post: post, theme: theme);
+                      },
+                    ),
+                  );
+                } else {
+                  return Center(child: Text('Something went wrong!'));
+                }
+              },
             )
           : Center(
               child: Column(
@@ -95,6 +143,15 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
             ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+          );
+        },
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }
@@ -147,10 +204,14 @@ class _PostCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.more_horiz),
-                ),
+                if (FirebaseAuth.instance.currentUser!.uid ==
+                    post.publisherUserId)
+                  IconButton(
+                    onPressed: () {
+                      PostsController().deletePost(postId: post.postId);
+                    },
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -253,42 +314,15 @@ class _Post {
     required this.timestamp,
     required this.likes,
     required this.comments,
+    required this.publisherUserId,
+    required this.postId,
   });
 
   final String username;
   final String caption;
   final String timestamp;
+  final String publisherUserId;
   final int likes;
   final int comments;
+  final String postId;
 }
-
-const List<_Post> _samplePosts = [
-  _Post(
-    username: 'Alice',
-    caption: 'Sunny day at the beach ☀️',
-    timestamp: '2h',
-    likes: 128,
-    comments: 14,
-  ),
-  _Post(
-    username: 'Bob',
-    caption: 'New year, new goals! 💪',
-    timestamp: '5h',
-    likes: 86,
-    comments: 9,
-  ),
-  _Post(
-    username: 'Charlie',
-    caption: 'Coffee + code = ❤️',
-    timestamp: '1d',
-    likes: 203,
-    comments: 32,
-  ),
-  _Post(
-    username: 'Dina',
-    caption: 'Hiking adventures this weekend 🥾',
-    timestamp: '2d',
-    likes: 54,
-    comments: 5,
-  ),
-];

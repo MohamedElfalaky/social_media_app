@@ -1,5 +1,6 @@
 import 'dart:developer';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthController {
@@ -25,6 +26,11 @@ class AuthController {
 
         await userCredentials.user!.sendEmailVerification();
 
+        await addUserToUsersCollection(
+          mail: email,
+          userName: username,
+          userID: userCredentials.user!.uid,
+        );
         return AuthResponse(success: true, message: 'Registration successful');
       } else {
         return AuthResponse(success: false, message: 'Registration failed');
@@ -70,6 +76,22 @@ class AuthController {
       log('Error during sign out: $e');
       return AuthResponse(success: false, message: 'Error during sign out');
     }
+  }
+
+  Future<void> addUserToUsersCollection({
+    required String mail,
+    required String userName,
+    required String userID,
+    String? imgUrl,
+    int? mobileNumber,
+  }) async {
+    await FirebaseFirestore.instance.collection('users').add({
+      "imgUrl": imgUrl ?? "",
+      "mail": mail,
+      "mobileNumber": mobileNumber ?? 0,
+      "userID": userID,
+      "userName": userName,
+    });
   }
 }
 
